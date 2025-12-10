@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Sorteador Profissional</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+    <style>
+        /* === VARIÁVEIS DE TEMA === */
+        :root {
+            /* Padrão (Tema 1) */
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --ball-border: #000000;
+            --ball-bg: #DC143C; /* Crimson */
+            --ball-text: #000000;
+            --empty-ball-border: #d3d3d3;
+            --empty-ball-bg: #ffe6e6; /* Vermelho muito fraco */
+            --panel-bg: #f8f9fa;
+        }
+
+        /* Tema 2: Cinza/Verde */
+        body.theme-2 {
+            --bg-color: #f0f0f0;
+            --text-color: #333333;
+            --ball-border: #90ee90;
+            --ball-bg: #ffffff;
+            --ball-text: #006400;
+            --empty-ball-border: #add8e6;
+            --empty-ball-bg: #e0e0e0;
+            --panel-bg: #e9ecef;
+        }
+
+        /* Tema 3: Dark Mode */
+        body.theme-3 {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --ball-border: #ffffff;
+            --ball-bg: #2c2c2c;
+            --ball-text: #ffffff;
+            --empty-ball-border: #444444;
+            --empty-ball-bg: #000000;
+            --panel-bg: #1e1e1e;
+        }
+
+        /* Tema 4: Azul/Laranja (Contraste Complementar) */
+        body.theme-4 {
+            --bg-color: #e3f2fd; /* Azul muito claro */
+            --text-color: #0d47a1;
+            --ball-border: #0d47a1;
+            --ball-bg: #ff9800; /* Laranja */
+            --ball-text: #ffffff;
+            --empty-ball-border: #90caf9;
+            --empty-ball-bg: #ffffff;
+            --panel-bg: #bbdefb;
+        }
+
+        /* === ESTILOS GERAIS === */
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.5s ease-in-out;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Animação de Flash ao sortear */
+        @keyframes flashBg {
+            0% { background-color: var(--bg-color); }
+            50% { background-color: var(--ball-bg); }
+            100% { background-color: var(--bg-color); }
+        }
+        .flash-animation {
+            animation: flashBg 0.5s ease-in-out;
+        }
+
+        /* === CURSOR E COOLDOWN === */
+        body.cooldown-active {
+            cursor: wait !important;
+        }
+        
+        body.cooldown-active .grid-wrapper {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        
+        body.cooldown-active .settings-bar button,
+        body.cooldown-active #manualInputSection button,
+        body.cooldown-active #manualInputSection input {
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        /* Barra Superior */
+        .top-bar {
+            background-color: var(--panel-bg);
+            padding: 15px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-bottom: 2px solid var(--empty-ball-border);
+            text-transform: uppercase;
+        }
+
+        /* === BOLAS DE BINGO DA GRADE === */
+        .bingo-ball {
+            width: 100%;
+            aspect-ratio: 1/1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border: 2px solid var(--empty-ball-border);
+            background-color: var(--empty-ball-bg);
+            color: transparent; /* Número invisível se não sorteado */
+            font-size: 3rem;
+            transition: all 0.3s;
+        }
+
+        /* Bola Sorteada */
+        .bingo-ball.active {
+            border-color: var(--ball-border);
+            background-color: var(--ball-bg);
+            color: var(--ball-text);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            font-weight: 800;
+        }
+
+        /* === PAINEL ESQUERDO === */
+        .last-drawn-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            height: 100%;
+            padding: 30px 20px;
+            background-color: rgba(0,0,0,0.02);
+            border-right: 1px solid var(--empty-ball-border);
+            gap: 20px;
+        }
+
+        .drawn-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+        
+        .ball-display {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border: 3px solid var(--ball-border);
+            background-color: var(--ball-bg);
+            color: var(--ball-text);
+            margin: 0 5px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .ball-letter {
+            border: 3px solid var(--ball-border);
+            background-color: #fff;
+            color: #000;
+        }
+
+        .size-large { width: 120px; height: 120px; font-size: 3rem; z-index: 10; }
+        .size-medium { width: 80px; height: 80px; font-size: 2rem; opacity: 0.9; }
+        .size-small { width: 60px; height: 60px; font-size: 1.5rem; opacity: 0.7; }
+
+        .empty-slot {
+            background-color: transparent;
+            border: 2px dashed var(--empty-ball-border);
+            color: transparent;
+            box-shadow: none;
+        }
+
+        /* INPUT MANUAL */
+        #manualInputSection {
+            width: 100%;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--empty-ball-border);
+        }
+
+        /* === GRADE DIREITA === */
+        .grid-wrapper {
+            padding: 20px;
+            transition: opacity 0.2s;
+        }
+        
+        /* Cursor pointer apenas se sorteio aleatório habilitado */
+        .grid-wrapper.random-enabled {
+            cursor: pointer;
+        }
+        .grid-wrapper.random-enabled:hover {
+            background-color: rgba(0,0,0,0.01);
+        }
+
+        .grid-container {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(10, 1fr);
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            .grid-container {
+                grid-template-columns: repeat(5, 1fr);
+            }
+            .last-drawn-container {
+                border-right: none;
+                border-bottom: 1px solid var(--empty-ball-border);
+                flex-direction: column; /* Volta a ser coluna para acomodar o input em baixo */
+                padding: 10px;
+                height: auto;
+                gap: 10px;
+            }
+            /* Wrapper interno para as bolas ficarem lado a lado no mobile */
+            .balls-mobile-wrapper {
+                display: flex;
+                flex-direction: row;
+                justify-content: space-around;
+                width: 100%;
+                align-items: center;
+            }
+
+            .drawn-row {
+                flex-direction: column;
+                width: auto;
+            }
+            .size-large { width: 70px; height: 70px; font-size: 1.5rem; }
+            .size-medium { width: 50px; height: 50px; font-size: 1.2rem; }
+            .size-small { width: 40px; height: 40px; font-size: 1rem; }
+            
+            #manualInputSection {
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+        }
+
+        /* === BARRA DE CONFIGURAÇÕES === */
+        .settings-bar {
+            background-color: var(--panel-bg);
+            padding: 15px;
+            border-top: 2px solid var(--empty-ball-border);
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 20px;
+            margin-top: auto;
+        }
+
+        .settings-btn {
+            background: none;
+            border: 1px solid var(--text-color);
+            color: var(--text-color);
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: 0.2s;
+            position: relative;
+        }
+
+        .settings-btn:hover {
+            background-color: rgba(0,0,0,0.1);
+        }
+
+        .settings-btn.btn-danger-custom {
+            color: #dc3545;
+            border-color: #dc3545;
+            margin-left: auto;
+        }
+        .settings-btn.btn-danger-custom:hover {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        /* Menus Suspensos */
+        .dropdown-menu-custom {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: none;
+            flex-direction: column;
+            min-width: 220px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        .dropdown-menu-custom.show { display: flex; }
+        
+        .dropdown-item-custom {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            color: #333;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        .dropdown-item-custom:hover { background-color: #f0f0f0; }
+        .dropdown-item-custom.selected { background-color: #e9ecef; font-weight: bold; border-left: 4px solid #333; }
+
+    </style>
+</head>
+<body class="theme-1">
+
+    <div class="top-bar" id="topBarText">
+        Bingo - Cartela cheia
+    </div>
+
+    <div class="container-fluid flex-grow-1">
+        <div class="row h-100">
+            <div class="col-lg-4 col-12 p-0">
+                <div class="last-drawn-container">
+                    <div class="balls-mobile-wrapper">
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <div class="text-muted small text-uppercase mb-2">Último</div>
+                            <div class="drawn-row" id="last-0">
+                                <div class="ball-display size-large ball-letter empty-slot">-</div>
+                                <div class="ball-display size-large empty-slot">-</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+                            <div class="drawn-row" id="last-1">
+                                <div class="ball-display size-medium ball-letter empty-slot">-</div>
+                                <div class="ball-display size-medium empty-slot">-</div>
+                            </div>
+                            <div class="drawn-row" id="last-2">
+                                <div class="ball-display size-small ball-letter empty-slot">-</div>
+                                <div class="ball-display size-small empty-slot">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="manualInputSection">
+                        <input type="text" id="manualInput" class="form-control mb-2" placeholder="Digite o número (1-75)">
+                        <button class="btn btn-primary w-100" onclick="registerManualNumber()">Registrar número manualmente</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8 col-12">
+                <div class="grid-wrapper h-100 d-flex align-items-center" id="gridWrapper" onclick="tryDrawRandomNumber()">
+                    <div class="grid-container w-100" id="bingoGrid">
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-bar">
+        <button class="settings-btn" id="btnToggleType" title="Mudar para 'Linha'">
+            <i class="fa fa-random"></i>
+        </button>
+
+        <div style="position: relative;">
+            <button class="settings-btn" id="btnRandom" title="Permissão de sorteio">
+                <i class="fa fa-bolt"></i>
+            </button>
+            <div class="dropdown-menu-custom" id="menuRandom">
+                <div class="dropdown-item-custom" id="optRandomEnable" onclick="setRandomEnabled(true)">Habilitar sorteio aleatório</div>
+                <div class="dropdown-item-custom" id="optRandomDisable" onclick="setRandomEnabled(false)">Desabilitar sorteio aleatório</div>
+            </div>
+        </div>
+
+        <div style="position: relative;">
+            <button class="settings-btn" id="btnTheme" title="Escolher Tema">
+                <i class="fa fa-paint-brush"></i>
+            </button>
+            <div class="dropdown-menu-custom" id="menuTheme">
+                <div class="dropdown-item-custom" onclick="setTheme(1)">Tema 1 (Padrão)</div>
+                <div class="dropdown-item-custom" onclick="setTheme(2)">Tema 2 (Cinza/Verde)</div>
+                <div class="dropdown-item-custom" onclick="setTheme(3)">Tema 3 (Dark)</div>
+                <div class="dropdown-item-custom" onclick="setTheme(4)">Tema 4 (Azul/Laranja)</div>
+            </div>
+        </div>
+
+        <div style="position: relative;">
+            <button class="settings-btn" id="btnTimer" title="Tempo de Espera">
+                <i class="fa fa-clock-o"></i>
+            </button>
+            <div class="dropdown-menu-custom" id="menuTimer">
+                <div class="dropdown-item-custom" onclick="setCooldown(1)">1s</div>
+                <div class="dropdown-item-custom" onclick="setCooldown(3)">3s</div>
+                <div class="dropdown-item-custom" onclick="setCooldown(5)">5s (Padrão)</div>
+                <div class="dropdown-item-custom" onclick="setCooldown(7)">7s</div>
+                <div class="dropdown-item-custom" onclick="setCooldown(9)">9s</div>
+            </div>
+        </div>
+
+        <button class="settings-btn btn-danger-custom" id="btnReset" title="Reiniciar Bingo">
+            <i class="fa fa-trash-o"></i>
+        </button>
+    </div>
+
+    <div class="modal fade" id="resetModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reiniciar Jogo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Deseja reiniciar o bingo?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmReset()">Reiniciar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="endGameModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Sorteio finalizado!</h5>
+                </div>
+                <div class="modal-body">
+                    <p>Todos os números já saíram!</p>
+                    <p>Clique em Reiniciar para começar um novo bingo.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="confirmReset()">Reiniciar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="duplicateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Atenção</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Este número já foi sorteado!</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // === CONFIGURAÇÃO E ESTADO ===
+        const TOTAL_NUMBERS = 75;
+        const DEFAULT_COOLDOWN = 5;
+        
+        let gameState = {
+            drawnNumbers: [],
+            startTime: null,
+            isFinished: false
+        };
+
+        let settings = {
+            theme: 1,
+            cooldownTime: 5,
+            bingoType: "Bingo - Cartela cheia",
+            randomEnabled: false // Padrão: Desabilitado
+        };
+
+        let isCooldown = false;
+
+        // === INICIALIZAÇÃO ===
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFromStorage();
+            initGrid();
+            applySettingsUI();
+            updateUI();
+            
+            // Fechar menus ao clicar fora
+            document.addEventListener('click', (e) => {
+                closeMenuIfOutside(e, 'btnTheme', 'menuTheme');
+                closeMenuIfOutside(e, 'btnTimer', 'menuTimer');
+                closeMenuIfOutside(e, 'btnRandom', 'menuRandom');
+            });
+
+            document.getElementById('btnToggleType').onclick = toggleBingoType;
+            document.getElementById('btnTheme').onclick = () => toggleMenu('menuTheme');
+            document.getElementById('btnTimer').onclick = () => toggleMenu('menuTimer');
+            document.getElementById('btnRandom').onclick = () => toggleMenu('menuRandom');
+            
+            document.getElementById('btnReset').onclick = () => {
+                const modal = new bootstrap.Modal(document.getElementById('resetModal'));
+                modal.show();
+            };
+
+            // Enter no input também registra
+            document.getElementById('manualInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    registerManualNumber();
+                }
+            });
+        });
+
+        function closeMenuIfOutside(e, btnId, menuId) {
+            if(!e.target.closest('#' + btnId) && !e.target.closest('#' + menuId)) {
+                document.getElementById(menuId).classList.remove('show');
+            }
+        }
+
+        // === LÓGICA DO JOGO ===
+
+        function initGrid() {
+            const grid = document.getElementById('bingoGrid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= TOTAL_NUMBERS; i++) {
+                const ball = document.createElement('div');
+                ball.className = 'bingo-ball';
+                ball.id = `ball-${i}`;
+                ball.innerText = i;
+                grid.appendChild(ball);
+            }
+        }
+
+        function getLetter(num) {
+            if (num <= 15) return 'B';
+            if (num <= 30) return 'I';
+            if (num <= 45) return 'N';
+            if (num <= 60) return 'G';
+            return 'O';
+        }
+
+        // Sorteio Aleatório (Clique na grade)
+        function tryDrawRandomNumber() {
+            // Verifica se está habilitado nas configurações
+            if (!settings.randomEnabled) return;
+
+            if (gameState.isFinished) return;
+            if (isCooldown) return;
+
+            const available = [];
+            for(let i=1; i<=TOTAL_NUMBERS; i++) {
+                if(!gameState.drawnNumbers.includes(i)) available.push(i);
+            }
+
+            if (available.length === 0) {
+                finishGame();
+                return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * available.length);
+            const drawnNumber = available[randomIndex];
+
+            // Processa o número como "Não manual" (aplica cooldown)
+            processNumber(drawnNumber, false);
+        }
+
+        // Registro Manual
+        function registerManualNumber() {
+            if (gameState.isFinished) return;
+            if (isCooldown) return; // Opcional: Bloqueia manual se estiver em cooldown do aleatório? Vamos bloquear por segurança visual.
+
+            const input = document.getElementById('manualInput');
+            const rawValue = input.value.trim();
+            const number = parseInt(rawValue);
+
+            // Validação de entrada inválida
+            if (rawValue === "" || isNaN(number) || number < 1 || number > TOTAL_NUMBERS || rawValue.match(/[a-zA-Z]/)) {
+                alert("Por favor, insira um número válido entre 1 e 75.");
+                return; // Não apaga o input
+            }
+
+            // Validação de Duplicidade
+            if (gameState.drawnNumbers.includes(number)) {
+                input.value = ''; // Apaga input
+                const modal = new bootstrap.Modal(document.getElementById('duplicateModal'));
+                modal.show();
+                return;
+            }
+
+            // Sucesso Manual: Processa o número como "Manual" (SEM cooldown)
+            input.value = '';
+            processNumber(number, true);
+        }
+
+        // Função central para processar um número novo
+        function processNumber(number, isManual) {
+            // Define hora de início se for o primeiro
+            if (gameState.drawnNumbers.length === 0) {
+                gameState.startTime = new Date().toISOString();
+                saveToStorage();
+            }
+
+            gameState.drawnNumbers.push(number);
+            
+            playAudio();
+            triggerVisualEffect();
+
+            // Só aplica cooldown se NÃO for manual (conforme pedido)
+            if (!isManual) {
+                startCooldown();
+            }
+
+            saveToStorage();
+            updateUI();
+
+            if (gameState.drawnNumbers.length === TOTAL_NUMBERS) {
+                finishGame();
+            }
+        }
+
+        function startCooldown() {
+            isCooldown = true;
+            document.body.classList.add('cooldown-active');
+            
+            setTimeout(() => {
+                isCooldown = false;
+                document.body.classList.remove('cooldown-active');
+            }, settings.cooldownTime * 1000);
+        }
+
+        function playAudio() {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+            
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.5);
+        }
+
+        function triggerVisualEffect() {
+            document.body.classList.add('flash-animation');
+            setTimeout(() => {
+                document.body.classList.remove('flash-animation');
+            }, 500);
+        }
+
+        function finishGame() {
+            gameState.isFinished = true;
+            saveToStorage();
+            const modal = new bootstrap.Modal(document.getElementById('endGameModal'));
+            modal.show();
+        }
+
+        // === UI UPDATES ===
+
+        function updateUI() {
+            // Grade
+            gameState.drawnNumbers.forEach(num => {
+                const ball = document.getElementById(`ball-${num}`);
+                if (ball) ball.classList.add('active');
+            });
+
+            // Painel Esquerdo (Ordem: Último em cima)
+            const len = gameState.drawnNumbers.length;
+            renderLeftBall('last-0', gameState.drawnNumbers[len - 1]);
+            renderLeftBall('last-1', gameState.drawnNumbers[len - 2]);
+            renderLeftBall('last-2', gameState.drawnNumbers[len - 3]);
+        }
+
+        function renderLeftBall(rowId, number) {
+            const row = document.getElementById(rowId);
+            const ballLetter = row.children[0];
+            const ballNumber = row.children[1];
+
+            if (number) {
+                ballLetter.innerText = getLetter(number);
+                ballLetter.classList.remove('empty-slot');
+                ballLetter.style.backgroundColor = '#fff';
+                
+                ballNumber.innerText = number;
+                ballNumber.classList.remove('empty-slot');
+                ballNumber.style.backgroundColor = '';
+            } else {
+                ballLetter.innerText = '-';
+                ballLetter.classList.add('empty-slot');
+                ballNumber.innerText = '-';
+                ballNumber.classList.add('empty-slot');
+            }
+        }
+
+        function toggleMenu(id) {
+            const menu = document.getElementById(id);
+            menu.classList.toggle('show');
+            updateMenuSelections();
+        }
+
+        function updateMenuSelections() {
+            // Temas
+            document.querySelectorAll('#menuTheme .dropdown-item-custom').forEach((el, idx) => {
+                if ((idx + 1) === settings.theme) el.classList.add('selected');
+                else el.classList.remove('selected');
+            });
+            // Timer
+            document.querySelectorAll('#menuTimer .dropdown-item-custom').forEach(el => {
+                const val = parseInt(el.innerText);
+                if (val === settings.cooldownTime) el.classList.add('selected');
+                else el.classList.remove('selected');
+            });
+            // Random Enabled
+            const enableEl = document.getElementById('optRandomEnable');
+            const disableEl = document.getElementById('optRandomDisable');
+            if(settings.randomEnabled) {
+                enableEl.classList.add('selected');
+                disableEl.classList.remove('selected');
+                document.getElementById('gridWrapper').classList.add('random-enabled');
+            } else {
+                enableEl.classList.remove('selected');
+                disableEl.classList.add('selected');
+                document.getElementById('gridWrapper').classList.remove('random-enabled');
+            }
+        }
+
+        // === SETTINGS & LOGIC ===
+
+        function toggleBingoType() {
+            if (settings.bingoType === "Bingo - Cartela cheia") {
+                settings.bingoType = "Bingo - Linha";
+            } else {
+                settings.bingoType = "Bingo - Cartela cheia";
+            }
+            saveToStorage();
+            applySettingsUI();
+        }
+
+        function setRandomEnabled(isEnabled) {
+            settings.randomEnabled = isEnabled;
+            saveToStorage();
+            applySettingsUI();
+            document.getElementById('menuRandom').classList.remove('show');
+        }
+
+        function setTheme(n) {
+            settings.theme = n;
+            saveToStorage();
+            applySettingsUI();
+            document.getElementById('menuTheme').classList.remove('show');
+        }
+
+        function setCooldown(s) {
+            settings.cooldownTime = s;
+            saveToStorage();
+            applySettingsUI();
+            document.getElementById('menuTimer').classList.remove('show');
+        }
+
+        function applySettingsUI() {
+            document.getElementById('topBarText').innerText = settings.bingoType;
+            const btnType = document.getElementById('btnToggleType');
+            if (settings.bingoType === "Bingo - Cartela cheia") {
+                btnType.title = "Mudar para 'Linha'";
+            } else {
+                btnType.title = "Mudar para 'Cartela cheia'";
+            }
+
+            document.body.className = '';
+            document.body.classList.add(`theme-${settings.theme}`);
+            if (isCooldown) document.body.classList.add('cooldown-active');
+
+            updateMenuSelections();
+        }
+
+        // === STORAGE & HISTORY ===
+
+        function loadFromStorage() {
+            const savedSettings = localStorage.getItem('bingo_settings');
+            if (savedSettings) {
+                const parsed = JSON.parse(savedSettings);
+                // Merge para garantir que novas props existam (como randomEnabled)
+                settings = { ...settings, ...parsed };
+            }
+
+            const savedGame = localStorage.getItem('bingo_gamestate');
+            if (savedGame) gameState = JSON.parse(savedGame);
+        }
+
+        function saveToStorage() {
+            localStorage.setItem('bingo_settings', JSON.stringify(settings));
+            localStorage.setItem('bingo_gamestate', JSON.stringify(gameState));
+        }
+
+        function confirmReset() {
+            if (gameState.drawnNumbers.length > 0) {
+                const historyItem = {
+                    start: gameState.startTime,
+                    end: new Date().toISOString(),
+                    numbers: gameState.drawnNumbers,
+                    type: settings.bingoType
+                };
+                
+                let history = JSON.parse(localStorage.getItem('bingo_history') || '[]');
+                history.push(historyItem);
+                localStorage.setItem('bingo_history', JSON.stringify(history));
+            }
+
+            gameState = {
+                drawnNumbers: [],
+                startTime: null,
+                isFinished: false
+            };
+            saveToStorage();
+            location.reload();
+        }
+    </script>
+</body>
+</html>
