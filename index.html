@@ -570,11 +570,13 @@
             };
 
             // Enter no input também registra
-            document.getElementById('manualInput').addEventListener('keypress', function (e) {
+            let manualInput = document.getElementById('manualInput');
+            manualInput.addEventListener('keypress', function (e) {
                 if (e.key === 'Enter') {
                     registerManualNumber();
                 }
             });
+            manualInput.focus();
         });
 
         function closeMenuIfOutside(e, btnId, menuId) {
