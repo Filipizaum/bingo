@@ -617,6 +617,13 @@
                     }
                 });
                 manualInput.focus();
+
+                let editInput = document.getElementById('editInput');
+                editInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        confirmEdit();
+                    }
+                });
             }
 
             // === RECEBER MENSAGENS VIA BROADCAST (Para o modo apresentação e sincronia geral) ===
