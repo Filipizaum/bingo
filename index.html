@@ -440,6 +440,16 @@
             </div>
         </div>
 
+        <div style="position: relative;">
+            <button class="settings-btn" id="btnFlash" title="Efeito Visual">
+                <i class="fa fa-lightbulb-o"></i>
+            </button>
+            <div class="dropdown-menu-custom" id="menuFlash">
+                <div class="dropdown-item-custom" id="optFlashEnable" onclick="setFlashEnabled(true)">Ativar tela piscante</div>
+                <div class="dropdown-item-custom" id="optFlashDisable" onclick="setFlashEnabled(false)">Desativar tela piscante</div>
+            </div>
+        </div>
+
         <button class="settings-btn" id="btnUndo" title="Desfazer (Undo)" onclick="undoLastAction()">
             <i class="fa fa-arrow-left"></i>
         </button>
@@ -556,7 +566,8 @@
             theme: 1,
             cooldownTime: 5,
             bingoType: "Bingo - Cartela cheia",
-            randomEnabled: false
+            randomEnabled: false,
+            flashEnabled: true // Novo ajuste padrão
         };
 
         let isCooldown = false;
@@ -585,12 +596,14 @@
                     closeMenuIfOutside(e, 'btnTheme', 'menuTheme');
                     closeMenuIfOutside(e, 'btnTimer', 'menuTimer');
                     closeMenuIfOutside(e, 'btnRandom', 'menuRandom');
+                    closeMenuIfOutside(e, 'btnFlash', 'menuFlash');
                 });
 
                 document.getElementById('btnToggleType').onclick = toggleBingoType;
                 document.getElementById('btnTheme').onclick = () => toggleMenu('menuTheme');
                 document.getElementById('btnTimer').onclick = () => toggleMenu('menuTimer');
                 document.getElementById('btnRandom').onclick = () => toggleMenu('menuRandom');
+                document.getElementById('btnFlash').onclick = () => toggleMenu('menuFlash');
                 
                 document.getElementById('btnReset').onclick = () => {
                     const modal = new bootstrap.Modal(document.getElementById('resetModal'));
@@ -925,6 +938,9 @@
         }
 
         function triggerVisualEffect() {
+            // Verifica a nova configuração antes de piscar
+            if (!settings.flashEnabled) return;
+
             document.body.classList.add('flash-animation');
             setTimeout(() => {
                 document.body.classList.remove('flash-animation');
@@ -1017,6 +1033,16 @@
                 disableEl.classList.add('selected');
                 document.getElementById('gridWrapper').classList.remove('random-enabled');
             }
+            // Flash Enabled (NOVA SEÇÃO)
+            const flashEnableEl = document.getElementById('optFlashEnable');
+            const flashDisableEl = document.getElementById('optFlashDisable');
+            if(settings.flashEnabled) {
+                flashEnableEl.classList.add('selected');
+                flashDisableEl.classList.remove('selected');
+            } else {
+                flashEnableEl.classList.remove('selected');
+                flashDisableEl.classList.add('selected');
+            }
         }
 
         // === SETTINGS & LOGIC ===
@@ -1039,6 +1065,15 @@
             saveToStorage();
             applySettingsUI();
             document.getElementById('menuRandom').classList.remove('show');
+            broadcastUpdate(false);
+        }
+
+        function setFlashEnabled(isEnabled) {
+            if (isPresentationMode) return;
+            settings.flashEnabled = isEnabled;
+            saveToStorage();
+            applySettingsUI();
+            document.getElementById('menuFlash').classList.remove('show');
             broadcastUpdate(false);
         }
 
