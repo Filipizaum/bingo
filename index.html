@@ -69,6 +69,18 @@
             flex-direction: column;
         }
 
+        /* MODO APRESENTAÇÃO (POPUP) */
+        body.presentation-mode .settings-bar,
+        body.presentation-mode #manualInputSection,
+        body.presentation-mode #btnReset, 
+        body.presentation-mode .modal {
+            display: none !important;
+        }
+        
+        body.presentation-mode .grid-wrapper {
+            pointer-events: none; /* Impede cliques na popup */
+        }
+
         /* Animação de Flash ao sortear */
         @keyframes flashBg {
             0% { background-color: var(--bg-color); }
@@ -440,6 +452,10 @@
             <i class="fa fa-pencil"></i>
         </button>
 
+        <button class="settings-btn" id="btnPresenter" title="Abrir Visualização do Apresentador" onclick="openPresenterWindow()">
+            <i class="fa fa-eye"></i>
+        </button>
+
         <button class="settings-btn btn-danger-custom" id="btnReset" title="Reiniciar Bingo">
             <i class="fa fa-trash-o"></i>
         </button>
@@ -523,6 +539,9 @@
         const TOTAL_NUMBERS = 75;
         const DEFAULT_COOLDOWN = 5;
         
+        // Canal de comunicação entre abas/popups
+        const broadcastChannel = new BroadcastChannel('bingo_channel');
+
         // Estado do Jogo
         let gameState = {
             drawnNumbers: [],
@@ -531,7 +550,7 @@
         };
 
         // Estado de Desfazer/Refazer
-        let undoStack = []; // Guardará os números removidos para o Redo
+        let undoStack = []; 
 
         let settings = {
             theme: 1,
@@ -542,47 +561,106 @@
 
         let isCooldown = false;
         let isEditMode = false;
-        let numberToEdit = null; // Armazena qual número (valor antigo) estamos editando
+        let numberToEdit = null;
+        let isPresentationMode = false;
 
         // === INICIALIZAÇÃO ===
         document.addEventListener('DOMContentLoaded', () => {
+            // Verifica se está no modo apresentação via Query Param
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('mode') && urlParams.get('mode') === 'presentation') {
+                isPresentationMode = true;
+                document.body.classList.add('presentation-mode');
+            }
+
             loadFromStorage();
             initGrid();
             applySettingsUI();
             updateUI();
             updateUndoRedoButtons();
             
-            // Fechar menus ao clicar fora
-            document.addEventListener('click', (e) => {
-                closeMenuIfOutside(e, 'btnTheme', 'menuTheme');
-                closeMenuIfOutside(e, 'btnTimer', 'menuTimer');
-                closeMenuIfOutside(e, 'btnRandom', 'menuRandom');
-            });
+            // Listeners da interface (apenas se não for apresentação)
+            if (!isPresentationMode) {
+                document.addEventListener('click', (e) => {
+                    closeMenuIfOutside(e, 'btnTheme', 'menuTheme');
+                    closeMenuIfOutside(e, 'btnTimer', 'menuTimer');
+                    closeMenuIfOutside(e, 'btnRandom', 'menuRandom');
+                });
 
-            document.getElementById('btnToggleType').onclick = toggleBingoType;
-            document.getElementById('btnTheme').onclick = () => toggleMenu('menuTheme');
-            document.getElementById('btnTimer').onclick = () => toggleMenu('menuTimer');
-            document.getElementById('btnRandom').onclick = () => toggleMenu('menuRandom');
-            
-            document.getElementById('btnReset').onclick = () => {
-                const modal = new bootstrap.Modal(document.getElementById('resetModal'));
-                modal.show();
-            };
+                document.getElementById('btnToggleType').onclick = toggleBingoType;
+                document.getElementById('btnTheme').onclick = () => toggleMenu('menuTheme');
+                document.getElementById('btnTimer').onclick = () => toggleMenu('menuTimer');
+                document.getElementById('btnRandom').onclick = () => toggleMenu('menuRandom');
+                
+                document.getElementById('btnReset').onclick = () => {
+                    const modal = new bootstrap.Modal(document.getElementById('resetModal'));
+                    modal.show();
+                };
 
-            // Enter no input também registra
-            let manualInput = document.getElementById('manualInput');
-            manualInput.addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') {
-                    registerManualNumber();
+                let manualInput = document.getElementById('manualInput');
+                manualInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        registerManualNumber();
+                    }
+                });
+                manualInput.focus();
+            }
+
+            // === RECEBER MENSAGENS VIA BROADCAST (Para o modo apresentação e sincronia geral) ===
+            broadcastChannel.onmessage = (event) => {
+                const message = event.data;
+                
+                if (message.type === 'UPDATE_STATE') {
+                    // Recebeu todo o estado (usado para sincronizar)
+                    gameState = message.gameState;
+                    undoStack = message.undoStack;
+                    settings = message.settings;
+                    
+                    updateUI();
+                    applySettingsUI();
+                    updateUndoRedoButtons(); // Para consistência visual, embora escondido na apresentação
+                    
+                    // Se foi um update de novo número, pisca a tela e toca som
+                    if (message.triggerEffect) {
+                        playAudio();
+                        triggerVisualEffect();
+                    }
+                } else if (message.type === 'RELOAD') {
+                     location.reload();
                 }
-            });
-            manualInput.focus();
+            };
         });
 
         function closeMenuIfOutside(e, btnId, menuId) {
             if(!e.target.closest('#' + btnId) && !e.target.closest('#' + menuId)) {
                 document.getElementById(menuId).classList.remove('show');
             }
+        }
+
+        // === APRESENTAÇÃO ===
+        function openPresenterWindow() {
+            // Abre a mesma página com o parâmetro ?mode=presentation
+            const width = 1000;
+            const height = 700;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            
+            window.open(
+                window.location.pathname + '?mode=presentation', 
+                'BingoPresenter', 
+                `width=${width},height=${height},top=${top},left=${left},menubar=no,toolbar=no,location=no,status=no`
+            );
+        }
+
+        function broadcastUpdate(triggerEffect = false) {
+            // Envia o estado atual para qualquer outra janela aberta (ex: popup)
+            broadcastChannel.postMessage({
+                type: 'UPDATE_STATE',
+                gameState: gameState,
+                settings: settings,
+                undoStack: undoStack,
+                triggerEffect: triggerEffect
+            });
         }
 
         // === LÓGICA DO JOGO ===
@@ -596,19 +674,16 @@
                 ball.id = `ball-${i}`;
                 ball.innerText = i;
                 
-                // Evento de clique unificado para a grade
                 ball.onclick = (e) => {
-                    e.stopPropagation(); // Evita borbulhar para o gridWrapper
+                    e.stopPropagation(); 
+                    // Se for presentation, ignora
+                    if (isPresentationMode) return;
+
                     if (isEditMode) {
-                        // Se estiver no modo edição, edita SE a bola já estiver marcada
                         if (gameState.drawnNumbers.includes(i)) {
                             openEditModal(i);
                         }
                     } else {
-                        // Se não estiver em modo edição, o clique na grade (se ativado)
-                        // é tratado pelo gridWrapper (tryDrawRandomNumber)
-                        // Porém, o gridWrapper está abaixo. Como clicamos na bola, 
-                        // precisamos disparar o sorteio manual se habilitado.
                         tryDrawRandomNumber();
                     }
                 };
@@ -625,16 +700,15 @@
             return 'O';
         }
 
-        // Função wrapper para clique na área da grade
-        // Se clicar no espaço vazio entre bolas
         document.getElementById('gridWrapper').onclick = (e) => {
-            if (!isEditMode && e.target.id === 'gridWrapper' || e.target.id === 'bingoGrid') {
+            if (isPresentationMode) return;
+            if (!isEditMode && (e.target.id === 'gridWrapper' || e.target.id === 'bingoGrid')) {
                  tryDrawRandomNumber();
             }
         };
 
         function tryDrawRandomNumber() {
-            if (isEditMode) return; // Não sorteia em modo edição
+            if (isEditMode || isPresentationMode) return;
             if (!settings.randomEnabled) return;
             if (gameState.isFinished) return;
             if (isCooldown) return;
@@ -655,30 +729,25 @@
             processNumber(drawnNumber, false);
         }
 
-        // Registro Manual (Atualizado)
         function registerManualNumber() {
+            if (isPresentationMode) return;
+
             const input = document.getElementById('manualInput');
-            
-            // Foca no input sempre
             input.focus();
 
             if (gameState.isFinished) return;
             if (isCooldown) return; 
 
             const rawValue = input.value.trim();
-            
-            // Se vazio, apenas foca (já feito acima) e sai
             if (rawValue === "") return;
 
             const number = parseInt(rawValue);
 
-            // Validação de entrada inválida
             if (isNaN(number) || number < 1 || number > TOTAL_NUMBERS || rawValue.match(/[a-zA-Z]/)) {
                 alert("Por favor, insira um número válido entre 1 e 75.");
                 return; 
             }
 
-            // Validação de Duplicidade
             if (gameState.drawnNumbers.includes(number)) {
                 input.value = ''; 
                 const modal = new bootstrap.Modal(document.getElementById('duplicateModal'));
@@ -686,21 +755,16 @@
                 return;
             }
 
-            // Sucesso Manual
             input.value = '';
             processNumber(number, true);
         }
 
-        // Função central para processar um número novo
         function processNumber(number, isManual) {
-            // Define hora de início se for o primeiro
             if (gameState.drawnNumbers.length === 0) {
                 gameState.startTime = new Date().toISOString();
             }
 
-            // Ao inserir um novo número, limpamos a pilha de Redo, pois mudamos a história
             undoStack = [];
-
             gameState.drawnNumbers.push(number);
             
             playAudio();
@@ -713,6 +777,9 @@
             saveToStorage();
             updateUI();
             updateUndoRedoButtons();
+            
+            // Avisa a popup que houve mudança (com efeito visual)
+            broadcastUpdate(true);
 
             if (gameState.drawnNumbers.length === TOTAL_NUMBERS) {
                 finishGame();
@@ -722,6 +789,7 @@
         // === EDIÇÃO, UNDO E REDO ===
 
         function toggleEditMode() {
+            if (isPresentationMode) return;
             isEditMode = !isEditMode;
             const btn = document.getElementById('btnEditMode');
             const icon = btn.querySelector('i');
@@ -739,13 +807,10 @@
             }
         }
 
-        // Chamado ao clicar nas bolas laterais ou da grade (somente em modo edição)
         function handleBallClick(elementId) {
-            if (!isEditMode) return;
+            if (isPresentationMode || !isEditMode) return;
             
-            // Descobre qual o número atual baseado no ID da row (last-0, last-1, etc)
             const row = document.getElementById(elementId);
-            // O número está na segunda div filha
             const numDiv = row.children[1];
             const val = numDiv.innerText;
 
@@ -760,7 +825,6 @@
             document.getElementById('editInput').value = '';
             const modal = new bootstrap.Modal(document.getElementById('editModal'));
             modal.show();
-            // Focar no input da modal após abrir
             setTimeout(() => document.getElementById('editInput').focus(), 500);
         }
 
@@ -773,29 +837,24 @@
                 return;
             }
 
-            // Verifica se o novo valor já existe (exceto se for ele mesmo)
             if (newVal !== numberToEdit && gameState.drawnNumbers.includes(newVal)) {
                 alert("Este número já foi sorteado.");
                 return;
             }
 
-            // Substitui na array
             const idx = gameState.drawnNumbers.indexOf(numberToEdit);
             if (idx !== -1) {
                 gameState.drawnNumbers[idx] = newVal;
                 saveToStorage();
                 updateUI();
+                broadcastUpdate(false); // Atualiza popup sem piscar
 
-                // === NOVAS ALTERAÇÕES AQUI ===
-
-                // 1. Fecha a modal programaticamente
                 const modalEl = document.getElementById('editModal');
                 const modalInstance = bootstrap.Modal.getInstance(modalEl);
                 if (modalInstance) {
                     modalInstance.hide();
                 }
 
-                // 2. Sai do modo de edição voltando o cursor ao normal
                 if (isEditMode) {
                     toggleEditMode();
                 }
@@ -803,33 +862,19 @@
         }
 
         function undoLastAction() {
-            if (gameState.drawnNumbers.length === 0) return;
+            if (isPresentationMode || gameState.drawnNumbers.length === 0) return;
             
-            // Limite de 3 para Undo (mas precisamos respeitar a pilha geral se tiver mais lógica futura)
-            // O pedido diz "suporte a apenas 3 números". Vamos interpretar que só podemos dar undo
-            // nos últimos 3 visíveis. Mas tecnicamente, para Redo funcionar bem, é melhor
-            // apenas tirar do array principal e jogar no undoStack.
-            
-            // Só permite Undo se tiver algo para tirar
             const removed = gameState.drawnNumbers.pop();
             undoStack.push(removed);
 
-            // Se o stack ficar muito grande, podemos limpar o antigo, mas o pedido foca
-            // na visualização dos "3 últimos". Vamos deixar o stack crescer livremente
-            // ou limitar se a lógica de "apenas 3" for restritiva ao histórico. 
-            // O pedido diz "Este Ctrl+Z terá suporte a apenas 3 números". 
-            // Vamos limitar o undoStack? Não, limitar a ação do botão.
-            // Mas se eu fizer undo 4 vezes? O pedido diz que só tem suporte aos 3 do lado esquerdo.
-            // Isso implica que visualmente o usuário vê 3. Vamos permitir undo sequencial
-            // pois é o comportamento esperado de um "Ctrl+Z".
-            
             saveToStorage();
             updateUI();
             updateUndoRedoButtons();
+            broadcastUpdate(false);
         }
 
         function redoLastAction() {
-            if (undoStack.length === 0) return;
+            if (isPresentationMode || undoStack.length === 0) return;
 
             const restore = undoStack.pop();
             gameState.drawnNumbers.push(restore);
@@ -837,19 +882,16 @@
             saveToStorage();
             updateUI();
             updateUndoRedoButtons();
+            broadcastUpdate(false);
         }
 
         function updateUndoRedoButtons() {
             const btnUndo = document.getElementById('btnUndo');
             const btnRedo = document.getElementById('btnRedo');
 
-            // Habilita Undo se tiver números
             btnUndo.disabled = gameState.drawnNumbers.length === 0;
-
-            // Habilita Redo se tiver stack
             btnRedo.disabled = undoStack.length === 0;
         }
-
 
         // === UTILITÁRIOS ===
 
@@ -892,28 +934,29 @@
         function finishGame() {
             gameState.isFinished = true;
             saveToStorage();
-            const modal = new bootstrap.Modal(document.getElementById('endGameModal'));
-            modal.show();
+            // Modal só aparece na tela principal
+            if (!isPresentationMode) {
+                const modal = new bootstrap.Modal(document.getElementById('endGameModal'));
+                modal.show();
+            }
+            broadcastUpdate(false);
         }
 
         // === UI UPDATES ===
 
         function updateUI() {
-            // Limpa visual da grade
             document.querySelectorAll('.bingo-ball').forEach(b => {
                 b.classList.remove('active');
-                b.style.backgroundColor = ''; // Reset inline styles
+                b.style.backgroundColor = ''; 
                 b.style.color = '';
                 b.style.borderColor = '';
             });
 
-            // Atualiza Grade
             gameState.drawnNumbers.forEach(num => {
                 const ball = document.getElementById(`ball-${num}`);
                 if (ball) ball.classList.add('active');
             });
 
-            // Painel Esquerdo (Ordem: Último em cima)
             const len = gameState.drawnNumbers.length;
             renderLeftBall('last-0', len > 0 ? gameState.drawnNumbers[len - 1] : null);
             renderLeftBall('last-1', len > 1 ? gameState.drawnNumbers[len - 2] : null);
@@ -944,6 +987,7 @@
         }
 
         function toggleMenu(id) {
+            if (isPresentationMode) return;
             const menu = document.getElementById(id);
             menu.classList.toggle('show');
             updateMenuSelections();
@@ -978,6 +1022,7 @@
         // === SETTINGS & LOGIC ===
 
         function toggleBingoType() {
+            if (isPresentationMode) return;
             if (settings.bingoType === "Bingo - Cartela cheia") {
                 settings.bingoType = "Bingo - Linha";
             } else {
@@ -985,36 +1030,47 @@
             }
             saveToStorage();
             applySettingsUI();
+            broadcastUpdate(false);
         }
 
         function setRandomEnabled(isEnabled) {
+            if (isPresentationMode) return;
             settings.randomEnabled = isEnabled;
             saveToStorage();
             applySettingsUI();
             document.getElementById('menuRandom').classList.remove('show');
+            broadcastUpdate(false);
         }
 
         function setTheme(n) {
+            if (isPresentationMode) return;
             settings.theme = n;
             saveToStorage();
             applySettingsUI();
             document.getElementById('menuTheme').classList.remove('show');
+            broadcastUpdate(false);
         }
 
         function setCooldown(s) {
+            if (isPresentationMode) return;
             settings.cooldownTime = s;
             saveToStorage();
             applySettingsUI();
             document.getElementById('menuTimer').classList.remove('show');
+            broadcastUpdate(false);
         }
 
         function applySettingsUI() {
             document.getElementById('topBarText').innerText = settings.bingoType;
+            
+            // Só tenta mexer no botão se ele existir (na popup ele não existe ou está hidden)
             const btnType = document.getElementById('btnToggleType');
-            if (settings.bingoType === "Bingo - Cartela cheia") {
-                btnType.title = "Mudar para 'Linha'";
-            } else {
-                btnType.title = "Mudar para 'Cartela cheia'";
+            if(btnType && btnType.offsetParent !== null) { 
+                if (settings.bingoType === "Bingo - Cartela cheia") {
+                    btnType.title = "Mudar para 'Linha'";
+                } else {
+                    btnType.title = "Mudar para 'Cartela cheia'";
+                }
             }
 
             document.body.className = '';
@@ -1022,6 +1078,7 @@
             
             if (isEditMode) document.body.classList.add('edit-mode-active');
             if (isCooldown) document.body.classList.add('cooldown-active');
+            if (isPresentationMode) document.body.classList.add('presentation-mode');
 
             updateMenuSelections();
         }
@@ -1043,12 +1100,15 @@
         }
 
         function saveToStorage() {
+            if (isPresentationMode) return; // Popup não salva, apenas lê ou recebe update
             localStorage.setItem('bingo_settings', JSON.stringify(settings));
             localStorage.setItem('bingo_gamestate', JSON.stringify(gameState));
             localStorage.setItem('bingo_undostack', JSON.stringify(undoStack));
         }
 
         function confirmReset() {
+            if (isPresentationMode) return;
+
             if (gameState.drawnNumbers.length > 0) {
                 const historyItem = {
                     start: gameState.startTime,
@@ -1067,8 +1127,11 @@
                 startTime: null,
                 isFinished: false
             };
-            undoStack = []; // Limpa o undo ao reiniciar
+            undoStack = []; 
             saveToStorage();
+            
+            // Recarrega todas as abas
+            broadcastChannel.postMessage({ type: 'RELOAD' });
             location.reload();
         }
     </script>
